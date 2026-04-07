@@ -253,4 +253,17 @@ async function deleteAllTelegramMessages() {
   db.clearCourts();
 }
 
-module.exports = { notifyClubSummary, sendTestNotification, sendFiltersMessage, deleteAllTelegramMessages };
+async function sendAlertTelegram(message) {
+  const cfg = config.load();
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) return;
+  try {
+    await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
+      chat_id: cfg.telegramChatId,
+      text: message,
+    });
+  } catch (err) {
+    // Can't do much if Telegram itself fails
+  }
+}
+
+module.exports = { notifyClubSummary, sendTestNotification, sendFiltersMessage, deleteAllTelegramMessages, sendAlertTelegram };

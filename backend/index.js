@@ -76,6 +76,7 @@ async function runOnce() {
     await scraper.runScrape(emit);
   } catch (err) {
     log('error', `Error critico en scraping: ${err.message}`);
+    await notifier.sendAlertTelegram(`\u26a0\ufe0f Error critico en el scraper:\n${err.message}`);
   } finally {
     isRunning = false;
     lastCheck = new Date().toISOString();
@@ -116,7 +117,7 @@ async function startScheduler() {
   runOnce();
 }
 
-function stopScheduler() {
+async function stopScheduler() {
   config.set('scraperActive', false);
   if (schedulerTimer) {
     clearTimeout(schedulerTimer);
@@ -125,6 +126,7 @@ function stopScheduler() {
   nextCheck = null;
   log('info', 'Scraper detenido');
   io.emit('status', getStatus());
+  await notifier.sendAlertTelegram('\u26d4 Scraper detenido');
 }
 
 function getStatus() {
@@ -297,13 +299,14 @@ const PORT = process.env.PORT || 3001;
 })();
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  log('info', 'Cerrando servidor...');
+process.on('SIGINT', async () => {
+  await notifier.sendAlertTelegram('\u26a0\ufe0f Servidor apagandose...');
   server.close();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
+  await notifier.sendAlertTelegram('\u26a0\ufe0f Servidor apagandose...');
   server.close();
   process.exit(0);
 });
