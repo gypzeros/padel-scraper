@@ -3,7 +3,7 @@ const https = require('https');
 const config = require('./config');
 const db = require('./db');
 
-const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+const DAY_FULL = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 
 function formatFiltersBlock(cfg) {
   const dateFrom = cfg.dateFrom || 'today';
@@ -35,13 +35,24 @@ function formatClubBlock(club, courtsByDate, changes) {
   const dates = Object.keys(courtsByDate).sort();
   for (const dateStr of dates) {
     const d = new Date(dateStr + 'T12:00:00');
-    const dayName = DAY_SHORT[d.getDay()];
+    const dayName = DAY_FULL[d.getDay()];
     const [, m, day] = dateStr.split('-');
+
+    // Check if today or tomorrow
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const tom = new Date(now);
+    tom.setDate(tom.getDate() + 1);
+    const tomorrowStr = `${tom.getFullYear()}-${String(tom.getMonth()+1).padStart(2,'0')}-${String(tom.getDate()).padStart(2,'0')}`;
+
+    let label = `${dayName} ${day}/${m}`;
+    if (dateStr === todayStr) label += ' (Hoy)';
+    else if (dateStr === tomorrowStr) label += ' (Manana)';
 
     const courts = courtsByDate[dateStr];
     const goneTimes = goneByDate[dateStr] || new Set();
 
-    lines.push(`\ud83d\udcc5 ${dayName} ${day}/${m}`);
+    lines.push(`\ud83d\udcc5 ${label}`);
 
     const byTime = {};
     for (const c of courts) {
