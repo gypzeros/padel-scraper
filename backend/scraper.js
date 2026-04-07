@@ -61,22 +61,29 @@ function isTimeInRange(time, from, to) {
   return time >= from && time <= to;
 }
 
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function isDayAllowed(dateStr, allowedDays) {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = new Date(dateStr + 'T12:00:00');
   return allowedDays.includes(d.getDay());
 }
 
 function resolveDate(value) {
   if (!value || value === 'today') {
-    return new Date().toISOString().split('T')[0];
+    return localDateStr(new Date());
   }
   const match = value.match(/^today\+(\d+)$/);
   if (match) {
     const d = new Date();
     d.setDate(d.getDate() + parseInt(match[1]));
-    return d.toISOString().split('T')[0];
+    return localDateStr(d);
   }
-  return value; // already a YYYY-MM-DD string
+  return value;
 }
 
 async function scrapeClub(clubUrl, cfg, emit) {
@@ -96,10 +103,10 @@ async function scrapeClub(clubUrl, cfg, emit) {
     const dateTo = resolveDate(cfg.dateTo);
 
     const datesToCheck = [];
-    const current = new Date(dateFrom + 'T00:00:00');
-    const end = new Date(dateTo + 'T00:00:00');
+    const current = new Date(dateFrom + 'T12:00:00');
+    const end = new Date(dateTo + 'T12:00:00');
     while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = localDateStr(current);
       if (isDayAllowed(dateStr, cfg.days)) {
         datesToCheck.push(dateStr);
       }
