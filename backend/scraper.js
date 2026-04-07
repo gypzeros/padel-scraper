@@ -46,6 +46,7 @@ async function getTenant(slug) {
   const info = {
     tenant_id: tenant.tenant_id,
     name: tenant.tenant_name || slug,
+    timezone: tenant.address?.timezone || 'Europe/Madrid',
     resources,
   };
   tenantCache.set(slug, info);
@@ -55,6 +56,15 @@ async function getTenant(slug) {
 async function getAvailability(tenantId, date) {
   const url = `https://playtomic.com/api/clubs/availability?tenant_id=${tenantId}&date=${date}&sport_id=PADEL`;
   return fetchJson(url);
+}
+
+function utcToLocal(dateStr, timeUtc, timezone) {
+  // Build a UTC date and convert to club timezone
+  const utcDate = new Date(`${dateStr}T${timeUtc}Z`);
+  const localStr = utcDate.toLocaleString('sv-SE', { timeZone: timezone });
+  // "sv-SE" gives "YYYY-MM-DD HH:MM:SS" format
+  const [localDate, localTime] = localStr.split(' ');
+  return { date: localDate, time: localTime.substring(0, 5) };
 }
 
 function isTimeInRange(time, from, to) {
@@ -132,8 +142,16 @@ async function scrapeClub(clubUrl, cfg, emit) {
           const courtName = tenant.resources[resource.resource_id] || 'Pista';
 
           for (const slot of (resource.slots || [])) {
-            const time = slot.start_time?.substring(0, 5);
-            if (!time) continue;
+            if (!slot.start_time) continue;
+
+            // Convert UTC time from API to club local time
+            const local = utcToLocal(dateStr, slot.start_time, tenant.timezone);
+            const time = local.time;
+            const localDate = local.date;
+
+            // Skip if converted to a different date
+            if (localDate !== dateStr) continue;
+
             if (!isTimeInRange(time, cfg.timeFrom, cfg.timeTo)) continue;
 
             const price = slot.price || '';
