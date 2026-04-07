@@ -45,18 +45,19 @@ function formatClubSummary(club, courtsByDate, baseUrl, changes) {
     const sortedTimes = [...allTimes].sort();
 
     if (sortedTimes.length === 0) {
-      lines.push(`   \u274c Sin disponibilidad`);
+      lines.push(`\u274c Sin disponibilidad`);
       lines.push('');
       continue;
     }
 
-    for (const time of sortedTimes) {
-      if (byTime[time]) {
-        lines.push(`   \ud83d\udfe2 ${time}  (${byTime[time]})`);
-      } else {
-        // This time was available before but not anymore
-        lines.push(`   \u274c ${time}  ya no disponible`);
-      }
+    const available = sortedTimes.filter(t => byTime[t]).map(t => `${t}(${byTime[t]})`);
+    const gone = sortedTimes.filter(t => !byTime[t]);
+
+    if (available.length > 0) {
+      lines.push(`\ud83d\udfe2 ${available.join('  ')}`);
+    }
+    if (gone.length > 0) {
+      lines.push(`\u274c ${gone.join('  ')}`);
     }
     lines.push('');
   }
