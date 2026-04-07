@@ -240,7 +240,9 @@ async function runScrape(emit) {
   }
 
   // Send ONE single Telegram message with all clubs
-  if (anyChanges) {
+  // Always send on first run (no message tracked yet) or when changes detected
+  const isFirstRun = !db.getTelegramMessage('_main', '_main');
+  if (anyChanges || isFirstRun) {
     try {
       const errors = await notifier.sendFullMessage(cfg, clubsData);
       if (errors.length > 0) {
