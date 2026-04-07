@@ -17,7 +17,7 @@ const DEFAULTS = {
     'https://playtomic.com/clubs/gm-padel-indoor',
   ],
   dateFrom: 'today',
-  dateTo: 'today+10',
+  dateTo: 'today+7',
   timeFrom: '16:00',
   timeTo: '21:00',
   days: [1, 2, 3, 4, 5, 6, 0], // lunes=1 ... domingo=0
