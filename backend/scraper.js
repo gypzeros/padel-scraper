@@ -223,6 +223,9 @@ async function scrapeClub(clubUrl, cfg, emit) {
 async function runScrape(emit) {
   const cfg = config.load();
 
+  // Clean up past dates
+  db.removeCourtsBefore(localDateStr(new Date()));
+
   emit('log', { level: 'info', message: 'Iniciando comprobacion...' });
   emit('scrape_start', { timestamp: new Date().toISOString() });
 

@@ -170,6 +170,10 @@ function removeCourt(id) {
   run('DELETE FROM found_courts WHERE id = ?', [id]);
 }
 
+function removeCourtsBefore(dateStr) {
+  run('DELETE FROM found_courts WHERE date < ?', [dateStr]);
+}
+
 function clearCourts() {
   run('DELETE FROM found_courts');
   run('DELETE FROM telegram_messages');
@@ -232,6 +236,7 @@ module.exports = {
   getCourtCount,
   getTelegramMessage,
   setTelegramMessage,
+  removeCourtsBefore,
   removeTelegramMessage,
   getAllTelegramMessages,
   addLog,
