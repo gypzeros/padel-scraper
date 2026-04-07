@@ -53,7 +53,7 @@ async function getTenant(slug) {
 }
 
 async function getAvailability(tenantId, date) {
-  const url = `${API_BASE}/availability?sport_id=PADEL&tenant_id=${tenantId}&start_min=${date}T00:00:00&start_max=${date}T23:59:59`;
+  const url = `https://playtomic.com/api/clubs/availability?tenant_id=${tenantId}&date=${date}&sport_id=PADEL`;
   return fetchJson(url);
 }
 
