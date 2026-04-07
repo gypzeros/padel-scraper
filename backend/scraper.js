@@ -23,6 +23,22 @@ async function fetchJson(url) {
   return res.json();
 }
 
+async function fetchTenantFromWebPage(slug) {
+  // When the API slug doesn't match, scrape the club web page for the tenant_id
+  const res = await fetch(`https://playtomic.com/clubs/${slug}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+  });
+  if (!res.ok) return null;
+  const html = await res.text();
+  // Look for tenant_id in JSON data embedded in the page
+  const match = html.match(/"tenant_id"\s*:\s*"([^"]+)"/);
+  if (!match) return null;
+  const tenantId = match[1];
+  const data = await fetchJson(`${API_BASE}/tenants?tenant_id=${tenantId}`);
+  const found = Array.isArray(data) ? data[0] : data;
+  return (found && found.tenant_id) ? found : null;
+}
+
 async function getTenant(slug) {
   if (tenantCache.has(slug)) return tenantCache.get(slug);
 
@@ -32,6 +48,11 @@ async function getTenant(slug) {
     const data = await fetchJson(`${API_BASE}/tenants?tenant_uid=${trySlug}`);
     const found = Array.isArray(data) ? data[0] : data;
     if (found && found.tenant_id) { tenant = found; break; }
+  }
+
+  // Fallback: scrape the club web page to find the tenant_id
+  if (!tenant) {
+    tenant = await fetchTenantFromWebPage(slug);
   }
   if (!tenant) throw new Error(`Club no encontrado: ${slug}`);
 
