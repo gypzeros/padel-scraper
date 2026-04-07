@@ -204,18 +204,15 @@ async function sendTestNotification() {
   return errors;
 }
 
-async function sendFiltersMessage(cfg) {
-  const errors = [];
-  if (!cfg.telegramBotToken || !cfg.telegramChatId) return errors;
-
+function formatFiltersMessage(cfg) {
   const dateFrom = cfg.dateFrom || 'today';
-  const dateTo = cfg.dateTo || 'today+10';
+  const dateTo = cfg.dateTo || 'today+7';
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
   const dayOrder = [1, 2, 3, 4, 5, 6, 0];
   const days = dayOrder.filter(d => (cfg.days || []).includes(d)).map(d => dayNames[d]).join(', ');
   const clubs = (cfg.clubs || []).map(u => u.split('/clubs/')[1] || u).join(', ');
 
-  const lines = [
+  return [
     '\u2699\ufe0f Filtros activos',
     '',
     `\ud83d\udcc5 Fechas: ${dateFrom} \u2192 ${dateTo}`,
@@ -223,12 +220,16 @@ async function sendFiltersMessage(cfg) {
     `\ud83d\udcc6 Dias: ${days}`,
     `\ud83c\udfdf\ufe0f Clubs: ${clubs}`,
     `\u23f1\ufe0f Intervalo: cada ${cfg.intervalSeconds || 30}s`,
-  ];
+  ].join('\n');
+}
+
+async function sendFiltersMessage(cfg) {
+  const errors = [];
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) return errors;
 
   try {
-    // Delete old filters message if exists
     const existingMsgId = db.getTelegramMessage('_filters', '_filters');
-    const newMsgId = await deleteAndSendTelegram(lines.join('\n'), existingMsgId);
+    const newMsgId = await deleteAndSendTelegram(formatFiltersMessage(cfg), existingMsgId);
     db.setTelegramMessage('_filters', '_filters', newMsgId);
   } catch (err) {
     errors.push(`Telegram: ${err.message}`);
@@ -284,16 +285,14 @@ async function pollTelegramMessages(getAvailabilityFn) {
       const chatId = update.message?.chat?.id;
       if (!chatId) continue;
 
-      // Respond with current availability
-      const clubs = cfg.clubs || [];
-      if (clubs.length === 0) {
-        await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
-          chat_id: chatId,
-          text: 'No hay clubs configurados.',
-        });
-        continue;
-      }
+      // Send filters first
+      const filtersMsg = formatFiltersMessage(cfg);
+      await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
+        chat_id: chatId,
+        text: filtersMsg,
+      });
 
+      // Then send availability
       const summaries = await getAvailabilityFn();
       if (summaries.length === 0) {
         await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
