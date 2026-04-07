@@ -61,7 +61,6 @@ function formatClubSummary(club, courtsByDate, baseUrl, changes) {
     lines.push('');
   }
 
-  lines.push(`\ud83d\udd17 ${baseUrl}`);
   lines.push(`\ud83d\udd04 ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
 
   return lines.join('\n');
