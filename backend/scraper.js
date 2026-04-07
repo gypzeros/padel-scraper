@@ -189,31 +189,18 @@ async function scrapeClub(clubUrl, cfg, emit) {
       }
     }
 
-    // Send one Telegram message per club with all dates
-    if (hasChanges) {
-      const courtsByDate = {};
-      for (const dateStr of datesToCheck) {
-        courtsByDate[dateStr] = db.getCourtsForClubAndDates(tenant.name, [dateStr]);
-      }
-      const changes = { newSlots, goneSlots };
-      try {
-        const errors = await notifier.notifyClubSummary(tenant.name, courtsByDate, clubUrl, changes);
-        if (errors.length > 0) {
-          emit('log', { level: 'warn', message: `Notificacion: ${errors.join(', ')}` });
-        } else {
-          emit('log', { level: 'info', message: `Telegram actualizado: ${tenant.name}` });
-        }
-      } catch (err) {
-        emit('log', { level: 'error', message: `Error notificando: ${err.message}` });
-      }
-    }
-
     emit('log', {
       level: 'info',
       message: `${tenant.name}: ${totalNew} nueva(s), ${totalGone} ya no disponible(s).`,
     });
 
-    return { changes: hasChanges };
+    return {
+      changes: hasChanges,
+      club: tenant.name,
+      datesToCheck,
+      newSlots,
+      goneSlots,
+    };
   } catch (err) {
     emit('log', { level: 'error', message: `Error consultando ${slug}: ${err.message}` });
     return { changes: false };
@@ -229,11 +216,40 @@ async function runScrape(emit) {
   emit('log', { level: 'info', message: 'Iniciando comprobacion...' });
   emit('scrape_start', { timestamp: new Date().toISOString() });
 
+  let anyChanges = false;
+  const clubsData = [];
+
   for (const clubUrl of (cfg.clubs || [])) {
     try {
-      await scrapeClub(clubUrl, cfg, emit);
+      const result = await scrapeClub(clubUrl, cfg, emit);
+      if (result.changes) anyChanges = true;
+      if (result.club) {
+        const courtsByDate = {};
+        for (const dateStr of result.datesToCheck) {
+          courtsByDate[dateStr] = db.getCourtsForClubAndDates(result.club, [dateStr]);
+        }
+        clubsData.push({
+          club: result.club,
+          courtsByDate,
+          changes: { newSlots: result.newSlots, goneSlots: result.goneSlots },
+        });
+      }
     } catch (err) {
       emit('log', { level: 'error', message: `Error en ${clubUrl}: ${err.message}` });
+    }
+  }
+
+  // Send ONE single Telegram message with all clubs
+  if (anyChanges) {
+    try {
+      const errors = await notifier.sendFullMessage(cfg, clubsData);
+      if (errors.length > 0) {
+        emit('log', { level: 'warn', message: `Notificacion: ${errors.join(', ')}` });
+      } else {
+        emit('log', { level: 'info', message: 'Telegram actualizado' });
+      }
+    } catch (err) {
+      emit('log', { level: 'error', message: `Error notificando: ${err.message}` });
     }
   }
 

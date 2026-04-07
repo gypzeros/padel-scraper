@@ -5,12 +5,25 @@ const db = require('./db');
 
 const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
-// changes: { newSlots: [{date, time}], goneSlots: [{date, time}] }
-function formatClubSummary(club, courtsByDate, baseUrl, changes) {
-  const lines = [`\ud83c\udfdf\ufe0f ${club}`];
-  lines.push('');
+function formatFiltersBlock(cfg) {
+  const dateFrom = cfg.dateFrom || 'today';
+  const dateTo = cfg.dateTo || 'today+7';
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+  const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+  const days = dayOrder.filter(d => (cfg.days || []).includes(d)).map(d => dayNames[d]).join(', ');
+  const clubs = (cfg.clubs || []).map(u => u.split('/clubs/')[1] || u).join(', ');
 
-  // Collect gone times per date for marking with X
+  return [
+    '\u2699\ufe0f Filtros activos',
+    `\ud83d\udcc5 ${dateFrom} \u2192 ${dateTo} | \u23f0 ${cfg.timeFrom || '00:00'}-${cfg.timeTo || '23:59'}`,
+    `\ud83d\udcc6 ${days}`,
+    `\ud83c\udfdf\ufe0f ${clubs}`,
+  ].join('\n');
+}
+
+function formatClubBlock(club, courtsByDate, changes) {
+  const lines = [`\ud83c\udfdf\ufe0f ${club}`];
+
   const goneByDate = {};
   if (changes) {
     for (const s of changes.goneSlots) {
@@ -21,7 +34,7 @@ function formatClubSummary(club, courtsByDate, baseUrl, changes) {
 
   const dates = Object.keys(courtsByDate).sort();
   for (const dateStr of dates) {
-    const d = new Date(dateStr + 'T00:00:00');
+    const d = new Date(dateStr + 'T12:00:00');
     const dayName = DAY_SHORT[d.getDay()];
     const [, m, day] = dateStr.split('-');
 
@@ -30,23 +43,17 @@ function formatClubSummary(club, courtsByDate, baseUrl, changes) {
 
     lines.push(`\ud83d\udcc5 ${dayName} ${day}/${m}`);
 
-    // Group current courts by time
     const byTime = {};
     for (const c of courts) {
-      if (!byTime[c.time]) {
-        byTime[c.time] = 1;
-      } else {
-        byTime[c.time]++;
-      }
+      if (!byTime[c.time]) byTime[c.time] = 1;
+      else byTime[c.time]++;
     }
 
-    // Collect all times (current + gone) sorted
     const allTimes = new Set([...Object.keys(byTime), ...goneTimes]);
     const sortedTimes = [...allTimes].sort();
 
     if (sortedTimes.length === 0) {
       lines.push(`   \u274c Sin disponibilidad`);
-      lines.push('');
       continue;
     }
 
@@ -54,16 +61,30 @@ function formatClubSummary(club, courtsByDate, baseUrl, changes) {
       if (byTime[time]) {
         lines.push(`   \ud83d\udfe2 ${time}  (${byTime[time]})`);
       } else {
-        // This time was available before but not anymore
         lines.push(`   \u274c ${time}  ya no disponible`);
       }
     }
-    lines.push('');
   }
 
-  lines.push(`\ud83d\udd04 ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
-
   return lines.join('\n');
+}
+
+function buildFullMessage(cfg, clubsData) {
+  const parts = [formatFiltersBlock(cfg)];
+
+  if (clubsData.length === 0) {
+    parts.push('\n\u274c No hay disponibilidad');
+  } else {
+    for (const { club, courtsByDate, changes } of clubsData) {
+      parts.push('');
+      parts.push(formatClubBlock(club, courtsByDate, changes));
+    }
+  }
+
+  parts.push('');
+  parts.push(`\ud83d\udd04 ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
+
+  return parts.join('\n');
 }
 
 // --- Email ---
@@ -126,7 +147,6 @@ async function deleteAndSendTelegram(text, existingMessageId) {
     throw new Error('Configuracion de Telegram incompleta');
   }
 
-  // Delete old message
   if (existingMessageId) {
     try {
       await telegramRequest(cfg.telegramBotToken, 'deleteMessage', {
@@ -134,11 +154,10 @@ async function deleteAndSendTelegram(text, existingMessageId) {
         message_id: existingMessageId,
       });
     } catch (err) {
-      // Ignore if message was already deleted
+      // Ignore if already deleted
     }
   }
 
-  // Send new message (always at the bottom of the chat)
   const result = await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
     chat_id: cfg.telegramChatId,
     text,
@@ -148,16 +167,19 @@ async function deleteAndSendTelegram(text, existingMessageId) {
 
 // --- Public API ---
 
-async function notifyClubSummary(club, courtsByDate, baseUrl, changes) {
-  const message = formatClubSummary(club, courtsByDate, baseUrl, changes);
+// Single message ID for the one unified message
+const MSG_KEY_CLUB = '_main';
+const MSG_KEY_DATE = '_main';
+
+async function sendFullMessage(cfg, clubsData) {
+  const message = buildFullMessage(cfg, clubsData);
   const errors = [];
-  const cfg = config.load();
 
   if (cfg.telegramBotToken && cfg.telegramChatId) {
     try {
-      const existingMsgId = db.getTelegramMessage(club, '_all');
+      const existingMsgId = db.getTelegramMessage(MSG_KEY_CLUB, MSG_KEY_DATE);
       const newMsgId = await deleteAndSendTelegram(message, existingMsgId);
-      db.setTelegramMessage(club, '_all', newMsgId);
+      db.setTelegramMessage(MSG_KEY_CLUB, MSG_KEY_DATE, newMsgId);
     } catch (err) {
       errors.push(`Telegram: ${err.message}`);
     }
@@ -170,69 +192,25 @@ async function sendTestNotification() {
   const cfg = config.load();
   const errors = [];
 
-  const testMessage = formatClubSummary('Club de prueba', {
-    '2025-01-15': [
-      { court_name: 'Pista 1 (90min - 20.00 EUR)', time: '16:00' },
-      { court_name: 'Pista 3 (90min - 25.00 EUR)', time: '16:00' },
-      { court_name: 'Pista 1 (90min - 25.00 EUR)', time: '18:00' },
-    ],
-    '2025-01-16': [],
-    '2025-01-17': [
-      { court_name: 'Pista 2 (90min - 30.00 EUR)', time: '19:00' },
-    ],
-  }, 'https://playtomic.com/test', {
-    newSlots: [{ date: '2025-01-17', time: '19:00' }],
-    goneSlots: [{ date: '2025-01-16', time: '17:00' }],
-  });
+  const message = buildFullMessage(cfg, [{
+    club: 'Club de prueba',
+    courtsByDate: {
+      '2025-01-15': [
+        { court_name: 'Pista 1', time: '16:00' },
+        { court_name: 'Pista 3', time: '16:00' },
+        { court_name: 'Pista 1', time: '18:00' },
+      ],
+      '2025-01-16': [],
+    },
+    changes: null,
+  }]);
 
   if (cfg.telegramBotToken && cfg.telegramChatId) {
     try {
-      await deleteAndSendTelegram(testMessage, null);
+      await deleteAndSendTelegram(message, null);
     } catch (err) {
       errors.push(`Telegram: ${err.message}`);
     }
-  }
-
-  if (cfg.smtpHost && cfg.emailTo) {
-    try {
-      await sendEmail('Test - Playtomic Scraper', testMessage);
-    } catch (err) {
-      errors.push(`Email: ${err.message}`);
-    }
-  }
-
-  return errors;
-}
-
-function formatFiltersMessage(cfg) {
-  const dateFrom = cfg.dateFrom || 'today';
-  const dateTo = cfg.dateTo || 'today+7';
-  const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
-  const dayOrder = [1, 2, 3, 4, 5, 6, 0];
-  const days = dayOrder.filter(d => (cfg.days || []).includes(d)).map(d => dayNames[d]).join(', ');
-  const clubs = (cfg.clubs || []).map(u => u.split('/clubs/')[1] || u).join(', ');
-
-  return [
-    '\u2699\ufe0f Filtros activos',
-    '',
-    `\ud83d\udcc5 Fechas: ${dateFrom} \u2192 ${dateTo}`,
-    `\u23f0 Horas: ${cfg.timeFrom || '00:00'} - ${cfg.timeTo || '23:59'}`,
-    `\ud83d\udcc6 Dias: ${days}`,
-    `\ud83c\udfdf\ufe0f Clubs: ${clubs}`,
-    `\u23f1\ufe0f Intervalo: cada ${cfg.intervalSeconds || 30}s`,
-  ].join('\n');
-}
-
-async function sendFiltersMessage(cfg) {
-  const errors = [];
-  if (!cfg.telegramBotToken || !cfg.telegramChatId) return errors;
-
-  try {
-    const existingMsgId = db.getTelegramMessage('_filters', '_filters');
-    const newMsgId = await deleteAndSendTelegram(formatFiltersMessage(cfg), existingMsgId);
-    db.setTelegramMessage('_filters', '_filters', newMsgId);
-  } catch (err) {
-    errors.push(`Telegram: ${err.message}`);
   }
 
   return errors;
@@ -249,7 +227,6 @@ async function deleteAllTelegramMessages() {
       message_id: msg.message_id,
     }).catch(() => {})
   ));
-  // Clear the table
   db.clearCourts();
 }
 
@@ -270,7 +247,7 @@ async function sendAlertTelegram(message) {
 
 let lastUpdateId = 0;
 
-async function pollTelegramMessages(getAvailabilityFn) {
+async function pollTelegramMessages(getFullMessageFn) {
   const cfg = config.load();
   if (!cfg.telegramBotToken) return;
 
@@ -285,32 +262,15 @@ async function pollTelegramMessages(getAvailabilityFn) {
       const chatId = update.message?.chat?.id;
       if (!chatId) continue;
 
-      // Send filters first
-      const filtersMsg = formatFiltersMessage(cfg);
+      const message = getFullMessageFn();
       await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
         chat_id: chatId,
-        text: filtersMsg,
+        text: message,
       });
-
-      // Then send availability
-      const summaries = await getAvailabilityFn();
-      if (summaries.length === 0) {
-        await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
-          chat_id: chatId,
-          text: '\u274c No hay disponibilidad en los filtros actuales.',
-        });
-      } else {
-        for (const msg of summaries) {
-          await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
-            chat_id: chatId,
-            text: msg,
-          });
-        }
-      }
     }
   } catch (err) {
     // Silently ignore polling errors
   }
 }
 
-module.exports = { notifyClubSummary, sendTestNotification, sendFiltersMessage, deleteAllTelegramMessages, sendAlertTelegram, pollTelegramMessages, formatClubSummary };
+module.exports = { sendFullMessage, sendTestNotification, deleteAllTelegramMessages, sendAlertTelegram, pollTelegramMessages, buildFullMessage };

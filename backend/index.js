@@ -109,11 +109,6 @@ async function startScheduler() {
   config.set('scraperActive', true);
   log('info', 'Scraper iniciado');
   sessionFound = 0;
-  try {
-    await notifier.sendFiltersMessage(config.load());
-  } catch (err) {
-    log('warn', `Error enviando filtros: ${err.message}`);
-  }
   runOnce();
 }
 
@@ -174,17 +169,11 @@ app.get('/api/config', (req, res) => {
 
 app.post('/api/config', async (req, res) => {
   config.save(req.body);
-  // Delete all Telegram messages first
+  // Delete all Telegram messages and clear data
   try {
     await notifier.deleteAllTelegramMessages();
   } catch (err) {
     log('warn', `Error borrando mensajes: ${err.message}`);
-  }
-  // Send new filters message
-  try {
-    await notifier.sendFiltersMessage(config.load());
-  } catch (err) {
-    log('warn', `Error enviando filtros: ${err.message}`);
   }
   sessionFound = 0;
   log('info', 'Configuracion actualizada - datos limpiados');
@@ -299,8 +288,8 @@ const PORT = process.env.PORT || 3001;
     // Poll Telegram for incoming messages every 3 seconds
     setInterval(() => {
       notifier.pollTelegramMessages(() => {
+        const cfg = config.load();
         const allCourts = db.getAllCourts({});
-        if (allCourts.length === 0) return [];
         // Group by club, then by date
         const byClub = {};
         for (const c of allCourts) {
@@ -308,11 +297,10 @@ const PORT = process.env.PORT || 3001;
           if (!byClub[c.club][c.date]) byClub[c.club][c.date] = [];
           byClub[c.club][c.date].push(c);
         }
-        const messages = [];
-        for (const [club, byDate] of Object.entries(byClub)) {
-          messages.push(notifier.formatClubSummary(club, byDate, '', null));
-        }
-        return messages;
+        const clubsData = Object.entries(byClub).map(([club, byDate]) => ({
+          club, courtsByDate: byDate, changes: null,
+        }));
+        return notifier.buildFullMessage(cfg, clubsData);
       });
     }, 3000);
   });
