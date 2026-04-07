@@ -12,7 +12,10 @@ if (fs.existsSync(envPath)) {
 }
 
 const DEFAULTS = {
-  clubs: ['https://playtomic.com/clubs/migracion-psm-fantasy'],
+  clubs: [
+    'https://playtomic.com/clubs/migracion-psm-fantasy',
+    'https://playtomic.com/clubs/gm-padel-indoor',
+  ],
   dateFrom: 'today',
   dateTo: 'today+10',
   timeFrom: '16:00',
