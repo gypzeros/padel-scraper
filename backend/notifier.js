@@ -25,10 +25,15 @@ function formatClubBlock(club, courtsByDate, changes) {
   const lines = [`\ud83c\udfdf\ufe0f ${club}`];
 
   const goneByDate = {};
+  const newByDate = {};
   if (changes) {
     for (const s of changes.goneSlots) {
       if (!goneByDate[s.date]) goneByDate[s.date] = new Set();
       goneByDate[s.date].add(s.time);
+    }
+    for (const s of changes.newSlots) {
+      if (!newByDate[s.date]) newByDate[s.date] = new Set();
+      newByDate[s.date].add(s.time);
     }
   }
 
@@ -51,6 +56,7 @@ function formatClubBlock(club, courtsByDate, changes) {
 
     const courts = courtsByDate[dateStr];
     const goneTimes = goneByDate[dateStr] || new Set();
+    const newTimes = newByDate[dateStr] || new Set();
 
     lines.push(`\ud83d\udcc5 ${label}`);
 
@@ -70,7 +76,8 @@ function formatClubBlock(club, courtsByDate, changes) {
 
     for (const time of sortedTimes) {
       if (byTime[time]) {
-        lines.push(`   \ud83d\udfe2 ${time}  (${byTime[time]})`);
+        const suffix = newTimes.has(time) ? '  \u2b50 nuevo!' : '';
+        lines.push(`   \ud83d\udfe2 ${time}  (${byTime[time]})${suffix}`);
       } else {
         lines.push(`   \u274c ${time}  ya no disponible`);
       }
