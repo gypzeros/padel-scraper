@@ -265,4 +265,53 @@ async function sendAlertTelegram(message) {
   }
 }
 
-module.exports = { notifyClubSummary, sendTestNotification, sendFiltersMessage, deleteAllTelegramMessages, sendAlertTelegram };
+// --- Telegram Bot polling ---
+
+let lastUpdateId = 0;
+
+async function pollTelegramMessages(getAvailabilityFn) {
+  const cfg = config.load();
+  if (!cfg.telegramBotToken) return;
+
+  try {
+    const updates = await telegramRequest(cfg.telegramBotToken, 'getUpdates', {
+      offset: lastUpdateId + 1,
+      timeout: 0,
+    });
+
+    for (const update of updates) {
+      lastUpdateId = update.update_id;
+      const chatId = update.message?.chat?.id;
+      if (!chatId) continue;
+
+      // Respond with current availability
+      const clubs = cfg.clubs || [];
+      if (clubs.length === 0) {
+        await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
+          chat_id: chatId,
+          text: 'No hay clubs configurados.',
+        });
+        continue;
+      }
+
+      const summaries = await getAvailabilityFn();
+      if (summaries.length === 0) {
+        await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
+          chat_id: chatId,
+          text: '\u274c No hay disponibilidad en los filtros actuales.',
+        });
+      } else {
+        for (const msg of summaries) {
+          await telegramRequest(cfg.telegramBotToken, 'sendMessage', {
+            chat_id: chatId,
+            text: msg,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    // Silently ignore polling errors
+  }
+}
+
+module.exports = { notifyClubSummary, sendTestNotification, sendFiltersMessage, deleteAllTelegramMessages, sendAlertTelegram, pollTelegramMessages, formatClubSummary };

@@ -295,6 +295,26 @@ const PORT = process.env.PORT || 3001;
         fetch(`${process.env.RENDER_EXTERNAL_URL}/api/status`).catch(() => {});
       }, 14 * 60 * 1000);
     }
+
+    // Poll Telegram for incoming messages every 3 seconds
+    setInterval(() => {
+      notifier.pollTelegramMessages(() => {
+        const allCourts = db.getAllCourts({});
+        if (allCourts.length === 0) return [];
+        // Group by club, then by date
+        const byClub = {};
+        for (const c of allCourts) {
+          if (!byClub[c.club]) byClub[c.club] = {};
+          if (!byClub[c.club][c.date]) byClub[c.club][c.date] = [];
+          byClub[c.club][c.date].push(c);
+        }
+        const messages = [];
+        for (const [club, byDate] of Object.entries(byClub)) {
+          messages.push(notifier.formatClubSummary(club, byDate, '', null));
+        }
+        return messages;
+      });
+    }, 3000);
   });
 })();
 
