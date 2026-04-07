@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: playtomic-scraper
+    runtime: node
+    buildCommand: npm run install:all && npm run build
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: AUTH_USER
+        sync: false
+      - key: AUTH_PASS
+        sync: false
+      - key: NODE_ENV
+        value: production
